@@ -8,7 +8,7 @@ Aplicación de consola desarrollada en C# con conexión a MySQL.
 - Registro de movimientos (entrada/salida)
 
 ## Tecnologías
-- C#
+- c#
 - MySQL
 
 ## Autor
