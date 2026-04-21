@@ -1,0 +1,178 @@
+﻿using MySql.Data.MySqlClient;
+using System;
+using System.Collections.Generic;
+
+class Program
+{
+    static void Main()
+    {
+        ProductoService service = new ProductoService();
+        bool salir = false;
+
+        while (!salir)
+        {
+            Console.WriteLine("\n--- SISTEMA DE STOCK ---");
+            Console.WriteLine("1. Agregar producto");
+            Console.WriteLine("2. --- LISTA DE PRODUCTOS ---");
+            Console.WriteLine("3. Registrar entrada");
+            Console.WriteLine("4. Registrar salida");
+            Console.WriteLine("5. Salir");
+
+            Console.Write("Opción: ");
+            int opcion = int.Parse(Console.ReadLine());
+
+            switch (opcion)
+            {
+                case 1:
+                    Console.Write("Nombre: ");
+                    string nombre = Console.ReadLine();
+
+                    Console.Write("Precio: ");
+                    decimal precio = decimal.Parse(Console.ReadLine());
+
+                    Console.Write("Stock inicial: ");
+                    int stock = int.Parse(Console.ReadLine());
+
+                    service.AgregarProducto(nombre, precio, stock);
+                    break;
+
+                case 2:
+                    List<Producto> productos = service.ObtenerProductos();
+
+                    foreach (var p in productos)
+                    {
+                        Console.WriteLine($"{p.Id} - {p.Nombre} - ${p.Precio} - Stock: {p.Stock}");
+                    }
+                    break;
+
+                case 3:
+                    Console.Write("ID producto: ");
+                    int idEntrada = int.Parse(Console.ReadLine());
+
+                    Console.Write("Cantidad: ");
+                    int cantEntrada = int.Parse(Console.ReadLine());
+
+                    service.RegistrarMovimiento(idEntrada, "entrada", cantEntrada);
+                    break;
+
+                case 4:
+                    Console.Write("ID producto: ");
+                    int idSalida = int.Parse(Console.ReadLine());
+
+                    Console.Write("Cantidad: ");
+                    int cantSalida = int.Parse(Console.ReadLine());
+
+                    service.RegistrarMovimiento(idSalida, "salida", cantSalida);
+                    break;
+
+                case 5:
+                    salir = true;
+                    break;
+            }
+        }
+    }
+}
+
+public class ProductoService
+{
+    private Database db = new Database();
+
+    public void AgregarProducto(string nombre, decimal precio, int stock)
+    {
+        using (var conn = db.GetConnection())
+        {
+            string query = "INSERT INTO productos (nombre, precio, stock) VALUES (@nombre, @precio, @stock)";
+            MySqlCommand cmd = new MySqlCommand(query, conn);
+
+            cmd.Parameters.AddWithValue("@nombre", nombre);
+            cmd.Parameters.AddWithValue("@precio", precio);
+            cmd.Parameters.AddWithValue("@stock", stock);
+
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    public List<Producto> ObtenerProductos()
+    {
+        List<Producto> lista = new List<Producto>();
+
+        using (var conn = db.GetConnection())
+        {
+            string query = "SELECT * FROM productos";
+            MySqlCommand cmd = new MySqlCommand(query, conn);
+            var reader = cmd.ExecuteReader();
+
+            while (reader.Read())
+            {
+                lista.Add(new Producto
+                {
+                    Id = reader.GetInt32("id"),
+                    Nombre = reader.GetString("nombre"),
+                    Precio = reader.GetDecimal("precio"),
+                    Stock = reader.GetInt32("stock")
+                });
+            }
+        }
+
+        return lista;
+    }
+
+    public void RegistrarMovimiento(int productoId, string tipo, int cantidad)
+    {
+        using (var conn = db.GetConnection())
+        {
+            // Obtener stock actual
+            string queryStock = "SELECT stock FROM productos WHERE id=@id";
+            MySqlCommand cmdStock = new MySqlCommand(queryStock, conn);
+            cmdStock.Parameters.AddWithValue("@id", productoId);
+
+            int stockActual = Convert.ToInt32(cmdStock.ExecuteScalar());
+
+            int nuevoStock = tipo == "entrada" ? stockActual + cantidad : stockActual - cantidad;
+
+            if (nuevoStock < 0)
+            {
+                Console.WriteLine("❌ No hay stock suficiente");
+                return;
+            }
+
+            // Actualizar stock
+            string update = "UPDATE productos SET stock=@stock WHERE id=@id";
+            MySqlCommand cmdUpdate = new MySqlCommand(update, conn);
+
+            cmdUpdate.Parameters.AddWithValue("@stock", nuevoStock);
+            cmdUpdate.Parameters.AddWithValue("@id", productoId);
+            cmdUpdate.ExecuteNonQuery();
+
+            // Registrar movimiento
+            string insertMov = "INSERT INTO movimientos (producto_id, tipo, cantidad, fecha) VALUES (@id, @tipo, @cantidad, NOW())";
+            MySqlCommand cmdMov = new MySqlCommand(insertMov, conn);
+
+            cmdMov.Parameters.AddWithValue("@id", productoId);
+            cmdMov.Parameters.AddWithValue("@tipo", tipo);
+            cmdMov.Parameters.AddWithValue("@cantidad", cantidad);
+
+            cmdMov.ExecuteNonQuery();
+        }
+    }
+}
+public class Producto
+{
+    public int Id { get; set; }
+    public string Nombre { get; set; }
+    public decimal Precio { get; set; }
+    public int Stock { get; set; }
+}
+
+
+public class Database
+{
+    private string connectionString = "server=localhost;database=stock_muebleria;uid=root;pwd=root;";
+
+    public MySqlConnection GetConnection()
+    {
+        MySqlConnection connection = new MySqlConnection(connectionString);
+        connection.Open();
+        return connection;
+    }
+}
